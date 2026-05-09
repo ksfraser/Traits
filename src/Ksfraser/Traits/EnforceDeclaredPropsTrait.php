@@ -1,9 +1,19 @@
 <?php
+/**
+ * Enforce Declared Properties Trait
+ *
+ * Restricts property access to only declared public properties
+ * and virtual getters.
+ *
+ * @package Ksfraser\Traits
+ */
+
+declare(strict_types=1);
+
 namespace Ksfraser\Traits;
 
 trait EnforceDeclaredPropsTrait
 {
-    // Getter: allow read access to declared public properties and virtual getters
     public function __get($property)
     {
         if (array_key_exists($property, get_class_vars(get_class($this)))) {
@@ -14,7 +24,6 @@ trait EnforceDeclaredPropsTrait
         return null;
     }
 
-    // Setter: only set declared public properties
     public function __set($property, $value)
     {
         if (array_key_exists($property, get_class_vars(get_class($this)))) {
