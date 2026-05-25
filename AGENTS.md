@@ -21,10 +21,11 @@ Ksfraser\Traits\
 ├── CrudEventEmitterTrait      # FA hook_invoke_all CRUD events (created/updated/deleted)
 ├── EnforceDeclaredPropsTrait  # Restrict property access (replaces magic __get/__set)
 ├── EntityStateTrait           # Track entity modification state
-├── TimestampTrait             # Created/updated timestamps
-├── ValidatableTrait           # Validation capability (replaces type validators)
 ├── EventEmitterTrait          # Event handling (replaces NOTIFY_* calls)
-└── LoggerAwareTrait           # PSR-3 logger injection
+├── HookQueryProviderTrait     # FA inter-module query hook provider (ksf_get_value/ksf_get_values/ksf_set_value)
+├── LoggerAwareTrait           # PSR-3 logger injection
+├── TimestampTrait             # Created/updated timestamps
+└── ValidatableTrait           # Validation capability (replaces type validators)
 ```
 
 ---
@@ -192,6 +193,72 @@ class hooks_ksf_FA_Calendar extends hooks {
   (e.g. `customer.name.changed` within the same process).
 - **CrudEventEmitterTrait** — when a service needs to notify other FA modules
   that a record was created/updated/deleted.
+
+---
+
+## HookQueryProviderTrait — FA Inter-Module Query Hooks
+
+### Purpose
+
+Provides three standard FA hook methods (`ksf_get_value`, `ksf_get_values`,
+`ksf_set_value`) so any module's `hooks.php` can advertise values to other
+modules without a direct code dependency.
+
+### Usage in hooks.php
+
+```php
+class hooks_ksf_FA_MyModule extends hooks {
+    use \Ksfraser\Traits\HookQueryProviderTrait;
+
+    protected function _getAdvertisedValues(): array
+    {
+        return [
+            'mymodule.version'       => $this->version,
+            'mymodule.module_name'   => $this->module_name,
+            'mymodule.hooks_version' => '2.0',
+        ];
+    }
+}
+```
+
+### Methods Provided
+
+| Method | Dispatched By | Behavior |
+|--------|--------------|----------|
+| `ksf_get_value(&$key, $opts)` | `hook_invoke_first('ksf_get_value', $key)` | Returns value for a known key, null otherwise |
+| `ksf_get_values(&$keys, $opts)` | `hook_invoke_all('ksf_get_values', $keys)` | Returns matching key-value pairs (or all if keys empty) |
+| `ksf_set_value(&$data, $opts)` | `hook_invoke_all('ksf_set_value', $data)` | No-op by default; override to accept pushed values |
+
+### Abstract Method
+
+Modules MUST implement `_getAdvertisedValues(): array` returning an
+associative array of namespaced key => value pairs. Keys use the
+convention `<module>.<name>` (e.g. `calendar.api_version`).
+
+### Composer Autoloading
+
+The trait must be available at class-load time. Add this bootstrap at the
+top of `hooks.php` (before the class definition):
+
+```php
+$autoload = dirname(__FILE__) . '/vendor/autoload.php';
+if (file_exists($autoload)) {
+    require_once $autoload;
+}
+```
+
+### Consumer Pattern
+
+```php
+$key = 'calendar.api_version';
+$value = hook_invoke_first('ksf_get_value', $key);
+if ($value !== null) {
+    // Calendar module responded
+}
+```
+
+IMPORTANT: FA's `hook_invoke_first/all` declare `&$data` (by-reference).
+Always pass a variable, never a literal.
 
 ---
 
