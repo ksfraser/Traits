@@ -561,5 +561,9 @@ All development is done in the **devel tree** (`~/Documents/Traits`).
 5. **Merge** to `master` when ready
 6. **Push** `master` to GitHub
 
-*No UAT bind point in `~/ksf_Infrastructure/fa_modules/Traits` — this repo is consumed via Composer path repos or other means.*
+### UAT Bind Point
+| Path | Purpose |
+|------|---------|
+| `~/Documents/Traits` | Devel tree — all development, testing, commits |
+| `~/ksf_Infrastructure/fa_modules/Traits` | UAT bind point — required so path repos (`../Traits`) resolve for consuming modules in UAT |
 
