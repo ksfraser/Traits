@@ -24,6 +24,8 @@ Ksfraser\Traits\
 ├── EventEmitterTrait          # Event handling (replaces NOTIFY_* calls)
 ├── FileLogger                 # PSR-3 FileLogger — writes to company/<comp>/logs/<module>.log
 ├── HookQueryProviderTrait     # FA inter-module query hook provider (ksf_get_value/ksf_get_values/ksf_set_value)
+├── InlinePostActionsTrait     # FA tab inline POST save/delete via a configured upsert action
+├── InlineTabRendererTrait     # FA tab renderTabContent flow delegating to a UI renderer
 ├── LoggerAwareTrait           # PSR-3 logger injection with auto-creation + log() convenience
 ├── TimestampTrait             # Created/updated timestamps
 └── ValidatableTrait           # Validation capability (replaces type validators)
@@ -497,11 +499,90 @@ class CrudEventEmitterTraitTest extends TestCase
 
 ---
 
+## InlinePostActionsTrait — Inline Tab POST Actions (v1.4.0)
+
+### Purpose
+
+Encapsulates the common inline tab save pattern used by FrontAccounting module
+tab classes: persist POST data through a dedicated upsert action class and show
+a notification. Other modules (CRM, HRM, ...) can reuse the same tab pattern
+without re-implementing the save/delete/no-hard-refresh behaviour.
+
+### Requirements
+
+| ID    | Requirement | Verified By |
+|-------|-------------|-------------|
+| IPA-1 | `initUpsertClass()` builds `$this->upsertClass` from `$upsertClassName` | `testConstructorBuildsUpsertClassFromClassName` |
+| IPA-2 | `handleSave($stockId, $postData)` persists via `$this->upsertClass` | `testHandleSavePersistsViaUpsertClass` |
+| IPA-3 | `handleDelete($stockId)` delegates to `$this->dao->delete()` | `testHandleDeleteDelegatesToDao` |
+| IPA-4 | `handlePostActions()` saves only on POST with the tab's own submit button present | `testHandlePostActionsSavesWhenButtonPresent` |
+| IPA-5 | No save when the button is absent (product/tab changes do not save) | `testHandlePostActionsSkipsWithoutButton` |
+| IPA-6 | No save on GET requests | `testHandlePostActionsSkipsOnGetRequest` |
+| IPA-7 | No save for empty stock id | `testHandlePostActionsSkipsEmptyStockId` |
+
+### Properties
+
+| Property | Declared By | Purpose |
+|----------|-------------|---------|
+| `$dao` | trait | The injected data-access object |
+| `$upsertClass` | trait | The upsert action created from `$upsertClassName` |
+| `$upsertClassName` | using class (required) | FQCN of the upsert action class |
+| `$saveButtonName` | using class (required) | Submit-button name that gates the save |
+| `$notificationMessage` | using class (required) | Message shown after a successful save |
+
+### Usage
+
+```php
+use Ksfraser\Traits\InlinePostActionsTrait;
+
+class IdentifiersTab extends AbstractTab
+{
+    use InlinePostActionsTrait;
+
+    protected $upsertClassName     = UpsertProductIdentifiersAction::class;
+    protected $saveButtonName      = 'pa_identifiers_save';
+    protected $notificationMessage = 'Identifiers saved.';
+
+    public function __construct(ProductIdentifiersDao $dao)
+    {
+        $this->dao = $dao;
+        $this->initUpsertClass();
+    }
+}
+```
+
+---
+
+## InlineTabRendererTrait — Inline Tab Rendering (v1.4.0)
+
+### Purpose
+
+Standardises `renderTabContent()` as "run inline POST actions, then delegate to
+a dedicated UI renderer". The using class supplies `$tabClassName` and may
+override `createTab()` when the renderer needs extra constructor arguments.
+
+### Properties
+
+| Property | Declared By | Purpose |
+|----------|-------------|---------|
+| `$tab` | trait | The UI renderer instance produced by `createTab()` |
+| `$tabClassName` | using class (required) | FQCN of the UI renderer class |
+
+### Methods
+
+| Method | Behaviour |
+|--------|-----------|
+| `renderTabContent($stockId)` | Calls `handlePostActions()`, then `createTab()->render($stockId)` |
+| `createTab()` | `new $this->tabClassName($this->dao)`; override for extra args |
+
+---
+
 ## Version Management
 
 ### Version History
 | Version | Changes |
 |---------|---------|
+| 1.4.0 | Added `InlinePostActionsTrait` and `InlineTabRendererTrait` for FA tab inline save/render patterns. |
 | 1.3.0 | Added `FileLogger` (PSR-3 file logger) and `LoggerAwareTrait` (logger injection). Added `psr/log` runtime dependency. |
 | 1.2.0 | Added `HookQueryProviderTrait` for FA inter-module query hooks. |
 | 0.1.0 | Initial release with `CrudEventEmitterTrait`, `EntityStateTrait`, `EventEmitterTrait`, `TimestampTrait`, `ValidatableTrait`, `EnforceDeclaredPropsTrait`. |
