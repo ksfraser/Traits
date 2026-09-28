@@ -45,11 +45,12 @@
 |---------|-----|-----------|---------|
 | `ksfraser/exceptions` | `Exceptions/` | `Ksfraser\Exceptions\` | Centralized exception library (Domain, Utility, CRM, Calendar, PM). 24 dependents. |
 | `ksfraser/famock` | `famock/` | `Ksfraser\FAMock\` | FA function mocks for unit testing outside live FA. 20 dependents. |
-| `ksfraser/ksf-fa-common` | `ksf_FA_Common/` | `ksfraser\FrontAccounting\Common\` | Shared FA platform: ContactTypeRegistry, SchemaInstaller, Traits (WorkflowHooks, CrudOperations, FlashMessage, CalendarRegistration). **Activate first.** 14 dependents. |
+| `ksfraser/ksf-fa-common` | `ksf_FA_Common/` | `ksfraser\FrontAccounting\Common\` | Shared FA platform as a **pure Composer/Packagist package** (v1.0.10, no FA extension — hooks.php deleted). ContactTypeRegistry, SchemaInstaller, Traits (WorkflowHooks, CrudOperations, FlashMessage, CalendarRegistration), plus `FileStorageService` and a `BaseHooks` base class (referenced by ksf_FA_Attachments), `ItemEvents\ItemEventPublisher`, `ExtensionRegistry`, `JobQueue`, `PreferenceRepository`. Loaded lazily via Composer autoload; **not** activated as an extension. |
 | `ksfraser/traits` | `Traits/` | `Ksfraser\Traits\` | Reusable traits: CrudEventEmitter, EntityState, EventEmitter, HookQueryProvider, InlineTabRenderer, Validatable, Timestamp, PSR-3 FileLogger. 13 dependents. |
 | `ksfraser/ksf-modules-dao` | `ksf_ModulesDAO/` | `Ksfraser\ModulesDAO\` | Cross-platform DAO: RecordStoreInterface, DbAdapterInterface, KeyValueStoreInterface. Adapters for FA, PDO, WordPress, SuiteCRM. 13 dependents. |
 | `ksfraser/database` | `Database/` | `Ksfraser\Database\` | Database helper utilities (DbManager static wrapper). 12 dependents. |
 | `ksfraser/ksf_modules_common` | `ksf_modules_common/` | `Ksfraser\ModulesCommon\` | Calculation framework: engine contract, context/result, parameter definitions, validation rules. 10 dependents. |
+| `ksfraser/ksf-common-db` | `ksf_common_db/` | `ksfraser\CommonDb\` | Transport-agnostic data dictionary + query builder. `DbConnectionInterface`, `FaDbAdapter` (native `db_*`, FA runtime), `PdoDbAdapter` (standalone), `TableDefinition`, `QueryBuilder`. Consumed by RBAC. |
 | `ksfraser/html` | `ksfraser/html/` | `Ksfraser\HTML\` | HTML generation library: Buttons, Cells, Forms, Tables, CSS, Ajax, Themes. |
 
 ---
@@ -78,9 +79,9 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 | Sub-Module | Dir | Tables | Purpose | Status |
 |------------|-----|--------|---------|--------|
 | **ksf_FA_EmployeePay** | `ksf_FA_EmployeePay/` | `0_ksf_employeepay_*` (8 tables) | Payroll calculations, deductions, entries, settings | Built out |
-| **ksf_FA_Leave** | `ksf_FA_Leave/` | `0_leave_*` (9 tables) | Leave requests, approvals, balances, accruals | Built out |
+| **ksf_FA_Leave** | `ksf_FA_Leave/` | `0_leave_*` (9 tables) | Leave requests, approvals, balances, accruals. Depends on `ksf_FA_CRM` for `0_crm_persons` (person records). | Built out |
 | **ksf_FA_Recruitment** | `ksf_FA_Recruitment/` | `0_recruit_*` (8 tables) | Job openings, applications, interviews, offers | Built out |
-| **ksf_FA_Onboarding** | `ksf_FA_Onboarding/` | `fa_onboarding_*` (3 tables) | Onboarding checklists and workflows | Built out |
+| **ksf_FA_Onboarding** | `ksf_FA_Onboarding/` | `fa_onboarding_*` (3 tables) | Onboarding checklists and workflows. Depends on `ksf_FA_Recruitment` (onboard from recruitment). | Built out |
 | **ksf_FA_Performance** | `ksf_FA_Performance/` | `fa_performance_*` (2 tables) | OKR performance management | Built out |
 | **ksf_FA_Timesheets** | `ksf_FA_Timesheets/` | `fa_timesheet_*` (2 tables) | Time tracking entries | Built out |
 | **ksf_FA_Roster** | `ksf_FA_Roster/` | `fa_roster_*` (3 tables) | Shift scheduling | Built out |
@@ -97,11 +98,11 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 
 | Module | Version | Purpose | Tables |
 |--------|---------|---------|--------|
-| **ksf_FA_Common** | — | Platform foundation. **Activate first.** ContactTypeRegistry, SchemaInstaller. | `0_ksf_contact_types`, `0_fa_job_queue`, `0_ksf_item_event_watermark`, `0_ksf_item_sync_state`, `0_ksf_notifications` |
+| **ksf_FA_Common** | — | Platform foundation library (pure Composer package, not activated). ContactTypeRegistry, SchemaInstaller. Creates shared tables on demand: `0_ksf_contact_types`, `0_fa_job_queue`, `0_ksf_item_event_watermark`, `0_ksf_item_sync_state`, `0_ksf_notifications`. | on-demand shared tables |
 | **ksf_FA_Classes** | — | Base class library (no hooks.php) | None |
 | **ksf_FA_RBAC** | 1.0.0 | Role-based access control. Bridges `ksfraser/rbac` to FA. | `0_rbac_teams`, `0_rbac_team_members`, `0_rbac_record_access`, `0_rbac_audit_log` |
 | **ksf_FA_GPG** | 2.4.19-0 | GPG signing/encryption. Key management UI. | `0_ksf_gpg_keys`, `0_ksf_gpg_operations`, `0_ksf_gpg_files`, `0_ksf_gpg_settings`, `0_ksf_gpg_team_keys` |
-| **ksf_FA_Mail** | — | SMTP mail via PHPMailer. System-wide and per-user accounts. | `0_preference_values` |
+| **ksf_FA_Mail** | — | SMTP mail via PHPMailer. System-wide and per-user accounts. Calendar integration: `cal_mail_with_ical()` → `ksf_mail_send_ical()` call chain for iCal invites. | `0_preference_values` |
 | **ksf_FA_Logging** | — | Structured JSON-lines logging. Per-module log levels. | `0_ksf_log_levels` |
 | **ksf_FA_API** | 1.0.0 | REST API endpoints | `0_ksf_api_logs` |
 | **ksf_FA_DataIntegrity** | 2.4.4 | Purchase/sales chain auditing. Orphan/counter drift detection. | `0_ksf_integrity_log` |
@@ -114,7 +115,7 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 | **ksf_FA_Calendar** | 2.5.0 | Calendar/events/meetings. CRM/HRM integration. Has own app tab. | `0_fa_cal_entries`, `0_fa_cal_invitees`, `0_fa_cal_sources` |
 | **ksf_FA_CampaignBuilder** | 1.0.0 | Marketing campaign management | `fa_campaigns`, `fa_campaign_nodes` |
 | **ksf_FA_EmailManager** | 1.0.0 | Email campaigns, templates, automation | Schema placeholder |
-| **ksf_FA_Loyalty** | 1.0.0 | Customer loyalty points/tiers | Schema placeholder |
+| **ksf_FA_Loyalty** | 1.0.0 | Customer loyalty points/tiers. Depends on `ksf_FA_CRM` (customer contacts). | Schema placeholder |
 | **ksf_FA_Coupons** | 1.0.0 | Coupon management | Schema placeholder |
 
 ### HR / People (see also HRM Sub-Modules above)
@@ -140,9 +141,8 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 |--------|---------|---------|--------|
 | **ksf_FA_Square** | — | Square POS sync. Items/customers/orders. Has own app tab. | `0_square*`, `0_ksf_import_square_*` (12 tables) |
 | **ksf_FA_Woocommerce** | 2.4.3-0 | WooCommerce bidirectional sync | Uses ImportStagingProcessing tables |
-| **ksf_FA_ImportStagingProcessing** | — | Unified staging pipeline for all external imports | `0_staging_*` (8 tables) |
-| **ksf_FA_ImportStagingProcessing_UI** | 2.4.3-0 | FA UI for staging pipeline | None (uses ISP tables) |
-
+| **ksf_FA_ImportStagingProcessing** | — | Unified staging pipeline for all external imports. Source modules: WooCommerce, Square API, Square CSV, PayPal, Bank Import. | `0_staging_*` (8 tables) |
+| **ksf_FA_ImportStagingProcessing_UI** | 2.4.3-0 | FA UI for staging pipeline (legacy rename of `FA_ImportSquareUp`) | None (uses ISP tables) |
 ### Finance / Accounting
 
 | Module | Version | Purpose | Tables |
@@ -191,6 +191,17 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 | **ksf_FA_recommendation** | — | Recommendation engine (scaffold) | None |
 | **ksf_FA_retirement** | — | Retirement planning (scaffold) | None |
 | **ksf_FA_SegFunds** | — | Segregated funds (legacy, no hooks) | None |
+| **ksf_FA_SupportTickets** | — | Support tickets/helpdesk | Schema placeholder |
+| **ksf_FA_Quality** | — | Quality/8D issue tracking | `0_ksf_quality_8d*` |
+| **ksf_FA_StockReservations** | — | Stock reservation on SO | `0_ksf_stock_reservations` |
+| **ksf_FA_StockTurnover** | — | Stock turnover metrics | `0_ksf_stock_turnover_metrics`, `0_ksf_stock_turnover_cron` |
+| **ksf_FA_StockNegatives** | — | Negative stock prevention | Schema placeholder |
+| **ksf_FA_ManufacturerConsolidation** | — | Manufacturer consolidation suggestions | `0_ksf_consolidation_*`, `0_ksf_supplier_moq_rules` |
+| **ksf_FA_PurchaseOrderTracking** | — | PO tracking metrics, GRN/PO hooks | `0_ksf_po_*` |
+| **ksf_FA_Rep_Audit** | — | Rep audit report (`reporting/`) | None |
+| **ksf_FA_Rep_Customer** | — | Rep customer report (`reporting/`) | None |
+| **ksf_FA_Rep_Operations** | — | Rep operations report (`reporting/`) | None |
+| **ksf_fa_downloader** | — | FA module download/fetch tool | `01_fa_download_targets`, `02_fa_downloads` |
 
 ---
 
@@ -315,10 +326,17 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 ### Table Prefix Convention
 - **New modules**: `0_` prefix (e.g., `0_hrm_departments`)
 - **Legacy modules**: bare names (e.g., `fa_campaigns`)
-- **Always**: use `TB_PREF` constant, never hardcode `0_`
+- **PHP code**: use the `TB_PREF` constant, never hardcode `0_`.
+- **SQL files (install.sql / uninstall.sql / upgrades)**: use **hardcoded `0_`**
+  literal — FA's `db_import()` / `update_databases()` replaces ONLY `0_` → `TB_PREF`
+  and does NOT resolve `@TB_PREF@` or `{TB_PREF}`. Never use those placeholders in
+  SQL files.
 
 ### Shared Tables
-- `0_ksf_contact_types` — Contact type registry (ksf_FA_Common)
+- `0_ksf_contact_types` — Contact type registry (ksf_FA_Common; created on demand)
+- `0_fa_job_queue` — Job queue (ksf_FA_Common; created on demand)
+- `0_ksf_notifications` — Notifications (ksf_FA_Common; created on demand)
+- `0_ksf_item_event_watermark` / `0_ksf_item_sync_state` — Item sync watermark + state (ksf_FA_Common; created on demand)
 - `0_staging_*` — Unified staging pipeline (ksf_FA_ImportStagingProcessing)
 - `0_rbac_*` — RBAC teams and access (ksf_FA_RBAC)
 
@@ -338,10 +356,11 @@ HRM (`ksf_FA_HRM`) is an orchestrator. These sub-modules answer hooks:
 | `HookQueryProviderTrait` | ksfraser/traits | Hook-based query provision |
 | `InlineTabRendererTrait` | ksfraser/traits | FA inline tab rendering |
 | `InlineTabSaverTrait` | ksfraser/traits | FA inline tab saving |
+| `InlinePostActionsTrait` | ksfraser/traits | FA tab inline POST save/delete via a configured upsert action (v1.4.0) |
 | `ValidatableTrait` | ksfraser/traits | Validation integration |
 | `TimestampTrait` | ksfraser/traits | Created/updated timestamps |
 | `LoggerAwareTrait` | ksfraser/traits | PSR-3 logger injection |
 
 ---
 
-*Last updated: 2026-08-26*
+*Last updated: 2026-09-14*

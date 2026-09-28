@@ -9,7 +9,7 @@
 |-----------------|------------------------------------------------------------|
 | Status          | Current state + unified-tabs roadmap (v2.4 concept)        |
 | Canonical copy  | `/home/kevin/Documents/APP_TAB_ARCHITECTURE.md`            |
-| Last updated    | 2026-08-28                                                 |
+| Last updated    | 2026-09-03                                                 |
 
 ---
 
@@ -168,7 +168,121 @@ Concrete copy/paste bugs found while distilling the template (see §7):
 | FA function mocks (unit tests)                              | `ksfraser/famock`             |
 | Validation traits/helpers (PHP 7.3+)                        | `ksfraser/validation`         |
 
+## 10. Form container constraint for tab content (verified 2026-09-03)
+
+**Finding:** A module tab's content is rendered **inside** the host page's single
+`<form>`, so a tab cannot emit its own `<form>` without creating invalid nested
+forms.
+
+Empirical probe against the live FA container (`items.php`, Variations tab):
+
+| Probe                                            | Result |
+|--------------------------------------------------|--------|
+| `<form>` count on the whole items page           | `1` (the one opened by `start_form(true)` at `items.php:559`) |
+| Tab panel `#_tabs_div` a descendant of the form? | `true` |
+| Action buttons resolve to which form?            | `idx:0` (the page form) |
+| `gcInSameFormAsTabsSel`                           | `true` — buttons share the host form with the hidden `_tabs_sel` |
+| Nested `<form>` already present inside the panel?| `0` |
+
+`items.php:559` (`start_form(true)`) opens the form; `tabbed_content_start()` at
+`items.php:611` then renders all tab panels (including the module's tab content,
+emitted via `item_display_tab_content` inside the `switch` at 613-658) **inside**
+that form. `end_form()` only runs at `items.php:670`, after the tab panels.
+
+**Consequence for HTML:** `<form>` cannot be nested. Browsers ignore the inner
+`<form>` start tag (or auto-close the outer one), silently dropping the inner
+form's fields and breaking the outer form's data. This is exactly the class of
+bug #15/#16. The Variations tab therefore must NOT render its own `<form>` tag —
+enforced by the regression test `testRenderDoesNotContainFormTag`.
+
+**Working approach (option A, adopted):** stay inside the host form and drive
+tab action buttons through FA's `ajaxsubmit`/`JsHttpRequest` path — the reusable
+SRP renderers `Ksfraser\Frontaccounting\HTML\MasterSummaryTable`,
+`FormFooter`, `TabContext` already emit `ajaxsubmit` submit buttons
++ `formnovalidate` + hidden `record_id` / `_tabs_sel`. No nested form, no broken
+native submit. `handlePostActions()` reads `$_POST['_tabs_sel']` (the host form
+still carries it) plus the button name.
+
+### 10.1 Considered alternative — the `</form><form>` "second form" trick
+
+Idea: emit an explicit `</form>` then a fresh `<form>` so the module's tab content
+closes out of the host form and opens its own, producing a second (non-nested)
+form.
+
+**Verdict: rejected / fragile, do not adopt.**
+
+- HTML5 parsing treats an *implied* `</form>` (a `</form>` without a matching open
+  tag in a parser context) as a parse-structure fixup, so the exact behaviour is
+  order- and browser-dependent and does not reliably produce the intended result.
+- Even when it "works" as a second sibling form, the host form's fields that render
+  **after** the tab panel — e.g. `hidden('fixed_asset', ...)` at `items.php:665`,
+  the `br()`/`div_end()` at 660-663, and any post-tab content — would no longer be
+  associated with the host form. They become orphans, silently breaking the item
+  page's own form/field gating. It is safe only if the module tab is guaranteed to
+  be the **last** element before `end_form()`, which is not the case here.
+- It reintroduces the #15/#16 fragility this test suite exists to prevent.
+
+If a module ever needs a **true** self-contained form with its own `action`
+independent of the host form, the host must be structured so the tab panel lives
+**outside** the host form (a host-side restructure of `items.php`, not a module
+string-emit) — or the module should use a dedicated standalone page/endpoint
+instead of a tab panel.
+
 ---
+
+## 11. App-shell + tab-controller SRPs (implemented — `ksfraser\FrontAccounting\Common\App`)
+
+The §7 roadmap's "app host" is now realized as two shared SRPs in `ksf-fa-common`,
+separating orchestration from presentation so modules stop hand-rolling routers.
+
+| Class                    | SRP                                 | Key API |
+|--------------------------|-------------------------------------|---------|
+| `AbstractAppShell`       | one app, many tabs                  | `registerTab(TabRegistration)`, `boot()`, `resolveView()`, `getSecurity()`, `renderMenu()`, `dispatch()`, `createController()` |
+| `AbstractTabController`  | one tab = summary table + entry form| `run()` → `handlePost()` + `renderSummaryTable()` + `renderEntryForm()` |
+| `TabRegistration`        | tab DTO                             | `(key, label, security, controllerClass, priority, order, pageFile, faType, options)` |
+| `TabRegistrationTrait`   | module-side registration            | `registerTabWithApp()`, `respondToAppRegister(&$data)` |
+
+**Register-with-me hook.** `AbstractAppShell::boot()` fires
+`hook_invoke_all('<appId>_register_tabs', $data)`. Any module responds by merging its
+`TabRegistration` (typically via `TabRegistrationTrait`), or an `AbstractPlugin` with
+`getTabRegistration()`. The shell merges core tabs + responded tabs + `PluginRegistry`.
+
+**Host page = thin router.** `index.php` resolves the view before `session.inc`, sets
+`$page_security`, then `page()` → `renderMenu()` → `dispatch()` → `end_page()`.
+`dispatch()` runs the controller's `run()` or includes a legacy `pageFile` fragment.
+
+**Controller convention.** Summary is a `MasterSummaryTable` (paging, edit/delete row
+actions, `preserve_params`); the entry form is always visible below it (blank for add,
+DTO-pre-filled for edit; Submit flips Save↔Update). Backed by overridables:
+`getFieldMetadata`, `listRows`, `countRows`, `findRecord`, `createRecord`,
+`updateRecord`, `deleteRecord`, `collectFormValues`, `blankValues`, `fkOptions`.
+Note: `formAction()` returns `REQUEST_URI` so `?view=` survives the POST, and
+`FieldForm::renderForm()` wants the **full** metadata array (it reads `['fields']`).
+`redirectAfterPost()` (PRG) also builds from `formAction()`, **not**
+`TabContext::redirectTarget()` (which uses `PHP_SELF` and drops the query string,
+bouncing the user to the app default tab after save/update/delete).
+
+**Legacy `pageFile` tabs must be fragments.** `dispatch()` includes the page script
+inside the shell's already-open `page()`/`end_page()`. A page file therefore must
+**not** call `page()`/`end_page()` itself and must **inherit** the host's
+`$path_to_root` (do not redefine it). HRM's `pages/*.php` follow this. CRM's original
+`pages/*.php` are **standalone** WebERP-style pages written for direct URL access:
+they redefine `$path_to_root = "../../.."` (relative to their own `pages/` dir) and
+call `page()`/`end_page()` themselves, so when routed through the shell their own
+relative includes resolve against the module root and the request dies mid-render
+(submenu shown, no body/footer). They are being converted to `AbstractTabController`
+subclasses one tab at a time (Customer Types first; e.g. `territories.php` still to do).
+
+**Pilot:** HRM Departments (`HrmAppShell` + `DepartmentsTabController`); full CRUD
+verified live. Rollout: CRM (Customer Types first), then PM.
+
+**Deployment gotcha (footer regression, 2026-09).** Modules that vendor `ksf-fa-common`
+as a **symlink** to `../../../ksf_FA_Common/` (e.g. `ksf_FA_Calendar`, `ksf_FA_Logging`)
+require `fa_modules/ksf_FA_Common/` to actually exist. When it is absent, the module's
+generated `autoload_classmap.php` still points at `.../ksf_FA_Common/src/Traits/...`;
+Composer includes the missing path and fatals mid-`<head>`, so the page renders body +
+menu but **no footer**. Fix: deploy `ksf_FA_Common` into `fa_modules/`. Prefer a real
+vendored copy (as HRM does) over a symlink that depends on a sibling module dir.
 
 ## Appendix A — editing this document (intentional-write ritual)
 
